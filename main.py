@@ -1,10 +1,10 @@
+import os  # 👈 เพิ่มบรรทัดนี้ด้านบนสุด
 import json
 import requests
 from datetime import datetime, timezone
 
-# --- ตั้งค่า URL และ Token ของ Cloudflare Worker ---
 CLOUDFLARE_WORKER_URL = os.getenv("CLOUDFLARE_WORKER_URL")
-API_SECRET_KEY = os.getenv("CLOUDFLARE_AUTH_TOKEN")
+API_SECRET_KEY = os.getenv("API_SECRET_KEY")
 
 # ==========================================
 # 🔹 ส่วนที่ 1: เช็คลิสต์ก่อนตลาดเปิด (Pre-Market)
