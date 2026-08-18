@@ -6,8 +6,11 @@ import pytz
 # ==========================================
 # CONFIGURATION
 # ==========================================
-CLOUDFLARE_WORKER_URL = "https://your-worker-name.your-subdomain.workers.dev/api/checklist"
-API_SECRET_KEY = "YOUR_CLOUDFLARE_SECRET_KEY"
+import os
+
+# ดึงค่า URL และ Token จาก GitHub Secrets ผ่าน Environment Variables
+CLOUDFLARE_WORKER_URL = os.getenv("CLOUDFLARE_WORKER_URL")
+API_SECRET_KEY = os.getenv("CLOUDFLARE_AUTH_TOKEN")
 
 # ==========================================
 # 1. CHECKLIST LOGIC FUNCTIONS
