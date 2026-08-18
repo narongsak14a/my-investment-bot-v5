@@ -78,6 +78,57 @@ def fetch_key_levels():
         "gamma_flip_zone": 2715.00  # เส้นแบ่งเขตแดนความผันผวน
     }
 
+def check_setup_value_up(current_price, val_price, fib_level, M5_volume):
+    """
+    ส่วนที่ 2: การคัดกรองหน้าเทรด (Setup & Location) - กรณี Value Up (Long)
+    """
+    # 1. หลุดโซนมูลค่า (Out of Value): ราคาอยู่ต่ำกว่า VAL
+    is_out_of_value = current_price < val_price
+    
+    # 2. อยู่ในโซน Discount: Fib อยู่ระหว่าง 70.5% - 88.6% (0.705 - 0.886)
+    is_discount_zone = 0.705 <= fib_level <= 0.886
+    
+    # 3. ปริมาณหนาแน่น (Volume 5m): สะสม > 20,000 สัญญา
+    is_high_volume = M5_volume >= 20000
+    
+    # 4. กฎเหล็กควบคุมความเสี่ยง (Invalidation): ปิดหลุด Fib 88.6% (0.886)
+    is_invalidated = fib_level > 0.886
+
+    # สรุปผลการคัดกรอง
+    if is_invalidated:
+        setup_status = "INVALIDATED"
+        recommendation = "❌ ยกเลิกแผน Long ทันที! ราคาปิดหลุด Fib 88.6% โครงสร้างฝั่งซื้อเสียหาย"
+    elif is_out_of_value and is_discount_zone and is_high_volume:
+        setup_status = "PASS"
+        recommendation = "✅ เข้าเงื่อนไข Long ครบทุกข้อ! สามารถพิจารณาเข้าเทรดได้"
+    else:
+        setup_status = "WAIT"
+        recommendation = "⏳ เงื่อนไขยังไม่ครบตามแผน รอจังหวะเพิ่มเติม"
+
+    return {
+        "status": setup_status,
+        "recommendation": recommendation,
+        "checklist": {
+            "1_out_of_value": {
+                "pass": is_out_of_value,
+                "detail": f"ราคาปัจจุบัน ({current_price}) หลุดต่ำกว่า VAL ({val_price})" if is_out_of_value else f"ราคายังไม่หลุด VAL ({val_price})"
+            },
+            "2_discount_zone": {
+                "pass": is_discount_zone,
+                "detail": f"ระดับ Fib อยู่ที่ {fib_level*100:.1f}% (อยู่ในโซน 70.5% - 88.6%)" if is_discount_zone else f"ระดับ Fib อยู่ที่ {fib_level*100:.1f}% (ไม่อยู่ในโซน Discount)"
+            },
+            "3_volume_m5": {
+                "pass": is_high_volume,
+                "detail": f"Volume 5m สะสม {M5_volume:,} สัญญา (มากกว่า 20,000)" if is_high_volume else f"Volume 5m สะสม {M5_volume:,} สัญญา (ต่ำกว่า 20,000 สัญญา ตลาดหมดพลัง)"
+            },
+            "4_invalidation_rule": {
+                "is_invalidated": is_invalidated,
+                "detail": "ราคาหลุด 88.6% ห้ามช้อนซื้อเด็ดขาด" if is_invalidated else "ราคายังปลอดภัย ไม่หลุดระดับ 88.6%"
+            }
+        }
+    }
+
+
 # ==========================================
 # 2. RUN CHECKLIST & SEND TO CLOUDFLARE
 # ==========================================
