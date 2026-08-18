@@ -28,29 +28,29 @@ def fetch_xauusd_analysis():
     # --- คำนวณ Fibonacci Retracement จาก High/Low ล่าสุด ---
     swing_high = float(df_m5['high'].max())
     swing_low = float(df_m5['low'].min())
-    fib_level = (swing_high - current_price) / (swing_high - swing_low) if swing_high != swing_low else 0.0
+    fib_level = float((swing_high - current_price) / (swing_high - swing_low)) if swing_high != swing_low else 0.0
 
     # --- ตรวจสอบโครงสร้างราคา H1 (Market Structure) ---
-    h1_sma = df_h1['close'].rolling(20).mean().iloc[-1]
-    is_value_up = current_price > h1_sma
+    h1_sma = float(df_h1['close'].rolling(20).mean().iloc[-1])
+    is_value_up = bool(current_price > h1_sma)
     market_env = "Value Up" if is_value_up else "Value Down / Sideways"
 
     # --- คำนวณพฤติกรรมแท่งเทียน 5m ล่าสุด ---
-    last_open = df_m5['open'].iloc[-1]
-    last_close = df_m5['close'].iloc[-1]
-    last_low = df_m5['low'].iloc[-1]
-    lower_wick = min(last_open, last_close) - last_low
-    body_size = abs(last_close - last_open)
+    last_open = float(df_m5['open'].iloc[-1])
+    last_close = float(df_m5['close'].iloc[-1])
+    last_low = float(df_m5['low'].iloc[-1])
+    lower_wick = float(min(last_open, last_close) - last_low)
+    body_size = float(abs(last_close - last_open))
     
-    has_absorption = lower_wick > body_size  # ไส้ล่างยาวกว่าเนื้อ = มีแรงซับ
-    is_bullish_close = last_close > last_open  # แท่งเขียวปิดบวก
+    has_absorption = bool(lower_wick > body_size)       # แปลงเป็น native bool
+    is_bullish_close = bool(last_close > last_open)    # แปลงเป็น native bool
 
     # --- คำนวณ R:R Ratio สมมติจากจุดเข้าปัจจุบัน ---
     stop_loss_price = swing_low
     take_profit_price = swing_high
     risk = current_price - stop_loss_price
     reward = take_profit_price - current_price
-    rr_ratio = round(reward / risk, 2) if risk > 0 else 0.0
+    rr_ratio = round(float(reward / risk), 2) if risk > 0 else 0.0
 
     return {
         "price": current_price,
@@ -78,12 +78,12 @@ def get_full_checklist_data():
     is_bullish_close = data["is_bullish_close"]
     rr_ratio = data["rr_ratio"]
 
-    # เงื่อนไขการประมวลผล
-    is_ny_session = True  # ประมวลผลช่วงเวลาเทรด
-    is_out_of_value = current_price < val_price
-    is_discount_zone = 0.705 <= fib_level <= 0.886
-    is_high_volume = m5_volume >= 2000  # ปรับเกณฑ์ Volume ให้เหมาะกับทองคำ XAUUSD
-    is_not_invalidated = fib_level <= 0.886
+    # เงื่อนไขการประมวลผล (ครอบด้วย bool() เพื่อป้องกัน numpy.bool_)
+    is_ny_session = True
+    is_out_of_value = bool(current_price < val_price)
+    is_discount_zone = bool(0.705 <= fib_level <= 0.886)
+    is_high_volume = bool(m5_volume >= 2000)
+    is_not_invalidated = bool(fib_level <= 0.886)
 
     return {
         "asset": "XAUUSD (Gold)",
@@ -107,7 +107,7 @@ def get_full_checklist_data():
                         "detail": "[เงื่อนไขโครงสร้าง]: ตรวจสอบกราฟ H1/H4 ของ XAUUSD ระบุแนวโน้มหลัก",
                         "mt5": "Market Structure Break (MSB)",
                         "tradingview": "Market Structure Break (MSB)",
-                        "pass": market_env == "Value Up",
+                        "pass": bool(market_env == "Value Up"),
                         "result": f"โครงสร้างราคาทองคำ H1: {market_env}"
                     },
                     {
@@ -193,7 +193,7 @@ def get_full_checklist_data():
                         "detail": "[เงื่อนไขกดปุ่มส่งคำสั่ง]: ย่อทำ Low สูงขึ้น + เกิด Buying Imbalance",
                         "mt5": "OrderFlow Imbalance",
                         "tradingview": "Volume Imbalance",
-                        "pass": has_absorption and is_bullish_close,
+                        "pass": bool(has_absorption and is_bullish_close),
                         "result": "เกิดสัญญาณ Trigger เข้าซื้อ Long XAUUSD" if (has_absorption and is_bullish_close) else "รอยืนยันสัญญาณ Trigger"
                     },
                     {
@@ -224,7 +224,7 @@ def get_full_checklist_data():
                         "detail": "[เงื่อนไขความคุ้มค่า]: สัดส่วน R:R ต้องมากกว่า 1.5R ขึ้นไป",
                         "mt5": "EA Risk Manager",
                         "tradingview": "Long Position Tool",
-                        "pass": rr_ratio >= 1.5,
+                        "pass": bool(rr_ratio >= 1.5),
                         "result": f"อัตรา R:R อยู่ที่ {rr_ratio}R ({'ผ่านเกณฑ์คุ้มค่า' if rr_ratio >= 1.5 else 'R:R ต่ำกว่า 1.5R'})"
                     },
                     {
