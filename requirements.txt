@@ -1,5 +1,6 @@
 google-genai
-tradingview-ta
-feedparser
 requests
+pytz
+feedparser
 youtube-transcript-api
+git+https://github.com/rongardF/tvdatafeed.git
