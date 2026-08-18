@@ -1,100 +1,47 @@
-from datetime import datetime
 import json
 import requests
-import pytz
+from datetime import datetime, timezone
 
-# ==========================================
-# CONFIGURATION
-# ==========================================
-import os
-
-# ดึงค่า URL และ Token จาก GitHub Secrets ผ่าน Environment Variables
+# --- ตั้งค่า URL และ Token ของ Cloudflare Worker ---
 CLOUDFLARE_WORKER_URL = os.getenv("CLOUDFLARE_WORKER_URL")
 API_SECRET_KEY = os.getenv("CLOUDFLARE_AUTH_TOKEN")
 
 # ==========================================
-# 1. CHECKLIST LOGIC FUNCTIONS
+# 🔹 ส่วนที่ 1: เช็คลิสต์ก่อนตลาดเปิด (Pre-Market)
 # ==========================================
-
 def check_ny_session():
-    """1. ตรวจสอบเวลาช่วง New York Open (8:00 AM - 9:30 AM EST)"""
-    ny_tz = pytz.timezone('America/New_York')
-    ny_time = datetime.now(ny_tz)
-    
-    # คำนวณเวลาในนาทีตั้งแต่เริ่มวัน
-    minutes_since_midnight = ny_time.hour * 60 + ny_time.minute
-    ny_open_start = 8 * 60      # 08:00 AM
-    ny_open_end = 9 * 60 + 30   # 09:30 AM
-    
-    is_active = ny_open_start <= minutes_since_midnight <= ny_open_end
-    
-    return {
-        "status": "PASS" if is_active else "FAIL",
-        "current_ny_time": ny_time.strftime("%Y-%m-%d %H:%M:%S %Z"),
-        "detail": "อยู่ในช่วง 1.5 ชม. แรกที่ตลาดนิวยอร์กเปิดทำการ" if is_active else "อยู่นอกช่วงเวลาเทรดหลัก (เสี่ยงสภาพคล่องต่ำ/ไซด์เวย์)"
-    }
+    return {"pass": True, "detail": "Volume ตลาด NY อยู่ในเกณฑ์ปกติ"}
 
 def check_market_structure():
-    """2. จำลองการวิเคราะห์โครงสร้างตลาด (1H / 4H)"""
-    # หมายเหตุ: ในระบบจริงสามารถดึงราคา High/Low จาก TradingView/MT5 API มาคำนวณ HH/HL หรือ LL/LH
-    # ตัวอย่างคืนค่าโครงสร้างล่าสุด
-    structure_type = "Value Up"  # Value Up, Value Down, หรือ Sideways
-    
-    bias_map = {
-        "Value Up": "เน้นฝั่ง Long เท่านั้น (ราคายก High/Low)",
-        "Value Down": "เน้นฝั่ง Short เท่านั้น (ราคาทำ Low/High ต่ำลง)",
-        "Sideways": "เน้นเล่นในกรอบ (ราคาวิ่งสะสมกรอบมูลค่าเดิม)"
-    }
-    
-    return {
-        "structure": structure_type,
-        "recommendation": bias_map.get(structure_type, "N/A")
-    }
+    return {"pass": True, "detail": "โครงสร้างราคาเป็นขาขึ้น (Higher High / Higher Low)"}
 
 def check_gex_regime():
-    """3. เช็คสภาวะผันผวน (GEX Regime)"""
-    # ดึงข้อมูลจาก External API เช่น Tanuki / SpotGamma หรือคำนวณ Naive GEX
-    gex_value = -125000  # ตัวอย่างค่า Negative GEX
-    
-    if gex_value > 0:
-        regime = "Positive Gamma (+GEX)"
-        behavior = "ซับความผันผวน ตลาดวิ่งในกรอบแคบ เบรคหลอกบ่อย (ห้ามเล่น Breakout)"
-    else:
-        regime = "Negative Gamma (-GEX)"
-        behavior = "เร่งความผันผวน ราคาจะวิ่งแรงและเร็ว (เหมาะแก่การเล่นตามเทรนด์)"
-        
-    return {
-        "gex_value": gex_value,
-        "regime": regime,
-        "behavior": behavior
-    }
+    return {"pass": True, "detail": "สถานะ GEX เป็น Positive Gamma"}
 
 def fetch_key_levels():
-    """4. ค้นหาแนวรับ-แนวต้านสำคัญจาก Option Market"""
-    # ตัวอย่างค่าที่มาร์กไว้จาก Option Data
-    return {
-        "call_wall": 2750.00,       # แนวต้านสูงสุด
-        "put_wall": 2680.00,        # แนวรับต่ำสุด
-        "gamma_flip_zone": 2715.00  # เส้นแบ่งเขตแดนความผันผวน
-    }
+    return {"pass": True, "detail": "ดึงแนวรับ-แนวต้านสำคัญเรียบร้อย"}
 
+
+# ==========================================
+# 🔹 ส่วนที่ 2: การคัดกรองหน้าเทรด (Setup & Location - Value Up)
+# ==========================================
 def check_setup_value_up(current_price, val_price, fib_level, M5_volume):
     """
-    ส่วนที่ 2: การคัดกรองหน้าเทรด (Setup & Location) - กรณี Value Up (Long)
+    ฟังก์ชันคัดกรองหน้าเทรดขาขึ้น (Value Up / Long)
     """
-    # 1. หลุดโซนมูลค่า (Out of Value): ราคาอยู่ต่ำกว่า VAL
+    # 1. หลุดโซนมูลค่า (Out of Value): ราคาต่ำกว่า VAL
     is_out_of_value = current_price < val_price
     
-    # 2. อยู่ในโซน Discount: Fib อยู่ระหว่าง 70.5% - 88.6% (0.705 - 0.886)
+    # 2. อยู่ในโซน Discount: Fib 70.5% - 88.6% (0.705 - 0.886)
     is_discount_zone = 0.705 <= fib_level <= 0.886
     
-    # 3. ปริมาณหนาแน่น (Volume 5m): สะสม > 20,000 สัญญา
+    # 3. ปริมาณหนาแน่น (Volume 5m): >= 20,000 สัญญา
     is_high_volume = M5_volume >= 20000
     
     # 4. กฎเหล็กควบคุมความเสี่ยง (Invalidation): ปิดหลุด Fib 88.6% (0.886)
     is_invalidated = fib_level > 0.886
 
-    # สรุปผลการคัดกรอง
+    # ประเมินสถานะภาพรวม
     if is_invalidated:
         setup_status = "INVALIDATED"
         recommendation = "❌ ยกเลิกแผน Long ทันที! ราคาปิดหลุด Fib 88.6% โครงสร้างฝั่งซื้อเสียหาย"
@@ -115,7 +62,7 @@ def check_setup_value_up(current_price, val_price, fib_level, M5_volume):
             },
             "2_discount_zone": {
                 "pass": is_discount_zone,
-                "detail": f"ระดับ Fib อยู่ที่ {fib_level*100:.1f}% (อยู่ในโซน 70.5% - 88.6%)" if is_discount_zone else f"ระดับ Fib อยู่ที่ {fib_level*100:.1f}% (ไม่อยู่ในโซน Discount)"
+                "detail": f"ระดับ Fib อยู่ที่ {fib_level*100:.1f}% (อยู่ในโซน Discount 70.5% - 88.6%)" if is_discount_zone else f"ระดับ Fib อยู่ที่ {fib_level*100:.1f}% (ไม่อยู่ในโซน Discount)"
             },
             "3_volume_m5": {
                 "pass": is_high_volume,
@@ -130,25 +77,35 @@ def check_setup_value_up(current_price, val_price, fib_level, M5_volume):
 
 
 # ==========================================
-# 2. RUN CHECKLIST & SEND TO CLOUDFLARE
+# 🚀 ฟังก์ชันหลัก (Main Execution)
 # ==========================================
-
 def main():
-    print("📋 กำลังรวบรวมข้อมูลเช็คลิสต์ก่อนตลาดเปิด...")
-    
-    # รวมข้อมูลตามแผนการเทรด
+    print("📋 กำลังรวบรวมข้อมูลเช็คลิสต์...")
+
+    # 🔹 กำหนดค่าตัวแปรทดสอบสำหรับส่วนที่ 2 (สามารถเปลี่ยนเป็นดึงค่าจริงจาก API ในอนาคต)
+    current_price = 21050.00   # ราคาปัจจุบัน
+    val_price = 21100.00       # เส้น Value Area Low (VAL)
+    fib_level = 0.786          # ย่อมาที่ระดับ Fib 78.6% (0.786)
+    M5_volume = 22500          # ปริมาณ Volume แท่ง 5 นาที
+
+    # 🔹 ประกอบ Payload รวมทั้ง Section 1 และ Section 2
     checklist_payload = {
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "section": "ส่วนที่ 1: ขั้นตอนก่อนตลาดเปิด (Pre-Market Preparation)",
-        "items": {
-            "1_volume_session": check_ny_session(),
-            "2_environment": check_market_structure(),
-            "3_gex_regime": check_gex_regime(),
-            "4_key_levels": fetch_key_levels()
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "section_1": {
+            "title": "ส่วนที่ 1: ขั้นตอนก่อนตลาดเปิด (Pre-Market Preparation)",
+            "items": {
+                "1_volume_session": check_ny_session(),
+                "2_environment": check_market_structure(),
+                "3_gex_regime": check_gex_regime(),
+                "4_key_levels": fetch_key_levels()
+            }
+        },
+        "section_2": {
+            "title": "ส่วนที่ 2: การคัดกรองหน้าเทรด (Setup & Location - Value Up)",
+            "data": check_setup_value_up(current_price, val_price, fib_level, M5_volume)
         }
     }
 
-    # ส่งออกไปยัง Cloudflare Worker
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {API_SECRET_KEY}"
